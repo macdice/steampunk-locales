@@ -1,15 +1,18 @@
 #!/usr/bin/sh
+#
+# Import glibc locale definitions from various GNU/Linux distributions and
+# compile them on the present system, which should be a later glibc system.
+#
+# XXX Could potentially import to non-glibc systems too?
 
 work="work"
 output="imported-locales"
 
-import_locales_deb()
+fetch_locales_deb()
 {
     distribution="$1"
     url="$2"
     package="$(basename $url)"
-
-    echo "Importing locales from $distribution..."
 
     mkdir -p "$work/$distribution/charmaps"
 
@@ -29,9 +32,9 @@ import_locales_deb()
         echo "Extracting $distribution package $package..."
         (
             cd "$fakeroot_path.tmp"
-            ar -x "../../../$package_path" data.tar.xz
-            tar xf data.tar.xz
-            rm data.tar.xz
+            ar -x "../../../$package_path"
+            tar xf data.tar.*
+            rm -f data.tar.* debian-binary control.tar.*
         )
         mv "$fakeroot_path.tmp" "$fakeroot_path"
     fi
@@ -48,6 +51,11 @@ import_locales_deb()
             mv "$charmap_path.tmp" "$charmap_path"
         fi
     done
+}
+
+compile_locales()
+{
+    distribution="$1"
 
     # compile all locales if we haven't already
     while read -r name charmap ; do
@@ -65,6 +73,17 @@ import_locales_deb()
     done < "$fakeroot_path/usr/share/i18n/SUPPORTED"
 }
 
+import_locales_deb()
+{
+    distribution="$1"
+    url="$2"
+
+    echo "Importing locales from $distribution..."
+
+    fetch_locales_deb "$distribution" "$url"
+    compile_locales "$distribution"
+}
+
 set -e
 
 # TODO It would be better to discover the latest released package than have
@@ -77,7 +96,7 @@ import_locales_deb "debian12" \
 
 import_locales_deb "ubuntu18" \
     "http://launchpadlibrarian.net/582642195/locales_2.27-3ubuntu1.5_all.deb"
-import locales_deb "ubuntu20" \
+import_locales_deb "ubuntu20" \
     "http://launchpadlibrarian.net/795475508/locales_2.31-0ubuntu9.18_all.deb"
-import locales_deb "ubuntu22" \
+import_locales_deb "ubuntu22" \
     "http://launchpadlibrarian.net/773665459/locales_2.39-0ubuntu8.4_all.deb"
