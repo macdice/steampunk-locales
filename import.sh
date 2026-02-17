@@ -32,7 +32,7 @@ fetch_locales_deb()
         echo "Extracting $distribution package $package..."
         (
             cd "$fakeroot_path.tmp"
-            ar -x "../../../$package_path"
+            ar x "../../../$package_path"
             tar xf data.tar.*
             rm -f data.tar.* debian-binary control.tar.*
         )
@@ -92,16 +92,41 @@ import_locales_deb()
     compile_locales "$distribution"
 }
 
+import_locales_deb_latest()
+{
+	# pull down the current list of packages for this distribution
+	distribution="$1"
+	deb_distname="$2"
+	package_list="$work/$distribution/packagelist.txt"
+	if [ ! -e "$package_list" ] ; then
+		curl -s "https://packages.debian.org/$deb_distname/allpackages?format=txt.gz" | gzip -d > "$package_list.tmp"
+		mv "$package_list.tmp" "$package_list"
+	fi
+
+	# extract the current version of the locales package
+	package_version="$(grep -E "^$package_name " "$package_list" | sed "s/$package_name (//;s/).*//")"
+
+	# is it marked [security]?  that affects the URL
+	# TODO: this is using http, but not yet verifying the signature
+	package_dirs="main/g/glibc"
+	package_name="locales"
+	package_arch="all"
+	if [ grep -E "^$package_name .* [security]" $package_list > /dev/null ] ; then
+		package_url="http://security.debian.org/debian-security/pool/updates/${package_dirs}/${package_name}_${package_version}_${package_arch}.deb"
+	else
+		package_url="http://ftp.debian.org/debian/pool/${package_dirs}/${package_name}_${package_version}_${package_arch}.deb"
+	fi
+
+	import_locales_deb "$distribution" "$package_url"
+}
+
 set -e
 
-# TODO It would be better to discover the latest released package than have
-# these hard-coded versions!
+import_locales_deb_latest "debian11" "bullseye"
+import_locales_deb_latest "debian12" "bookworm"
+import_locales_deb_latest "debian13" "trixie"
 
-import_locales_deb "debian11" \
-    "http://security.debian.org/debian-security/pool/updates/main/g/glibc/locales_2.28-10+deb10u4_all.deb"
-import_locales_deb "debian12" \
-    "http://http.us.debian.org/debian/pool/main/g/glibc/locales_2.36-9+deb12u10_all.deb"
-
+# TODO: find latest from ubuntu
 import_locales_deb "ubuntu18" \
     "http://launchpadlibrarian.net/582642195/locales_2.27-3ubuntu1.5_all.deb"
 import_locales_deb "ubuntu20" \
