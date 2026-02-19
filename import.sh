@@ -117,12 +117,8 @@ import_locales_deb_latest()
 
 	# extract the current version of the locales package
 	package_version="$(grep -E "^$package_name " "$package_list" | sed "s/$package_name (//;s/).*//")"
-	echo "package name: $package_name"
-	echo "package version: $package_version"
-	grep -E "^$package_name " "$package_list" | sed "s/$package_name (//;s/).*//"
 
-	#if grep -E "^$package_name .* [security]" $package_list > /dev/null ; then
-	if grep -E "^$package_name .*[security]" $package_list > /dev/null ; then
+	if grep "^$package_name .*\[security\]" $package_list > /dev/null ; then
 		package_url="http://security.debian.org/debian-security/pool/updates/${package_dirs}/${package_name}_${package_version}_${package_arch}.deb"
 	else
 		package_url="http://ftp.debian.org/debian/pool/${package_dirs}/${package_name}_${package_version}_${package_arch}.deb"
@@ -136,6 +132,7 @@ set -e
 import_locales_deb_latest "debian11" "bullseye"
 import_locales_deb_latest "debian12" "bookworm"
 import_locales_deb_latest "debian13" "trixie"
+import_locales_deb_latest "debian14" "forky"
 
 # TODO: find latest from ubuntu
 import_locales_deb "ubuntu18" \
