@@ -5,6 +5,8 @@
 #
 # XXX Could potentially import to non-glibc systems too?
 
+set -e
+
 work="work"
 output="imported-locales"
 
@@ -19,8 +21,8 @@ fetch_locales_deb()
     # pull down the package if we haven't already
     package_path="$work/$distribution/$package"
     if [ ! -f "$package_path" ] ; then
-        echo "Fetching $distribution package $package..."
-        curl -s "$url" > "$package_path.tmp"
+        echo "Fetching $distribution package $package from $url"
+        curl -f -s -S "$url" > "$package_path.tmp"
         mv "$package_path.tmp" "$package_path"
     fi
 
@@ -99,20 +101,28 @@ import_locales_deb_latest()
 	distribution="$1"
 	deb_distname="$2"
 	package_list="$work/$distribution/packagelist.txt"
+	mkdir -p "$(dirname $package_list)"
 	if [ ! -e "$package_list" ] ; then
-		curl -s "https://packages.debian.org/$deb_distname/allpackages?format=txt.gz" | gzip -d > "$package_list.tmp"
+		url="https://packages.debian.org/$deb_distname/allpackages?format=txt.gz"
+		echo "Fetching $url"
+		curl -f -s -S "$url" | gzip -d > "$package_list.tmp"
 		mv "$package_list.tmp" "$package_list"
 	fi
-
-	# extract the current version of the locales package
-	package_version="$(grep -E "^$package_name " "$package_list" | sed "s/$package_name (//;s/).*//")"
 
 	# is it marked [security]?  that affects the URL
 	# TODO: this is using http, but not yet verifying the signature
 	package_dirs="main/g/glibc"
 	package_name="locales"
 	package_arch="all"
-	if [ grep -E "^$package_name .* [security]" $package_list > /dev/null ] ; then
+
+	# extract the current version of the locales package
+	package_version="$(grep -E "^$package_name " "$package_list" | sed "s/$package_name (//;s/).*//")"
+	echo "package name: $package_name"
+	echo "package version: $package_version"
+	grep -E "^$package_name " "$package_list" | sed "s/$package_name (//;s/).*//"
+
+	#if grep -E "^$package_name .* [security]" $package_list > /dev/null ; then
+	if grep -E "^$package_name .*[security]" $package_list > /dev/null ; then
 		package_url="http://security.debian.org/debian-security/pool/updates/${package_dirs}/${package_name}_${package_version}_${package_arch}.deb"
 	else
 		package_url="http://ftp.debian.org/debian/pool/${package_dirs}/${package_name}_${package_version}_${package_arch}.deb"
