@@ -9,6 +9,7 @@ set -e
 
 work="work"
 output="imported-locales"
+localedef_version="$(localedef --version | head -1)"
 
 fetch_locales_deb()
 {
@@ -17,6 +18,16 @@ fetch_locales_deb()
     package="$(basename $url)"
 
     mkdir -p "$work/$distribution/charmaps"
+
+	echo <<EOF > "$work/$distribution/README"
+Locales cross-compiled using:
+
+$localdef_version
+
+Definitions obtained from:
+
+$url
+EOF
 
     # pull down the package if we haven't already
     package_path="$work/$distribution/$package"
@@ -127,17 +138,71 @@ import_locales_deb_latest()
 	import_locales_deb "$distribution" "$package_url"
 }
 
-set -e
+import_locales_debian_latest()
+{
+	# pull down the current list of packages for this distribution
+	distribution="$1"
+	codename="$2"
+	package_list="$work/$distribution/Packages"
+	mkdir -p "$(dirname $package_list)"
+	if [ ! -e "$package_list" ] ; then
+		url="https://archive.debian.org/debian/dists/$codename/main/binary-all/Packages.gz"
+		echo "Fetching $url"
+		curl -f -s -S "$url" | gzip -d > "$package_list.tmp"
+		mv "$package_list.tmp" "$package_list"
+	fi
 
-import_locales_deb_latest "debian11" "bullseye"
-import_locales_deb_latest "debian12" "bookworm"
-import_locales_deb_latest "debian13" "trixie"
-import_locales_deb_latest "debian14" "forky"
+	package_info="$work/$distribution/locales.package"
+	if [ ! -e "$package_info" ] ; then
+		awk 'BEGIN { in_zone = 0; } /^Package: locales$/ { in_zone = 1; print; } /^ *$/ { in_zone = 0; } in_zone { print; }' "$package_list" > "$package_info.tmp"
+		mv "$package_info.tmp" "$package_info"
+	fi
 
-# TODO: find latest from ubuntu
-import_locales_deb "ubuntu18" \
-    "http://launchpadlibrarian.net/582642195/locales_2.27-3ubuntu1.5_all.deb"
-import_locales_deb "ubuntu20" \
-    "http://launchpadlibrarian.net/795475508/locales_2.31-0ubuntu9.18_all.deb"
-import_locales_deb "ubuntu22" \
-    "http://launchpadlibrarian.net/773665459/locales_2.39-0ubuntu8.4_all.deb"
+	package_version="$( grep "Version: " "$package_info" | sed 's/^[^:]*: //')"
+	package_filename="$( grep "Filename: " "$package_info" | sed 's/^[^:]*: //')"
+	package_url="https://archive.debian.org/debian/$package_filename"
+
+	import_locales_deb "$distribution" "$package_url"
+}
+
+import_locales_ubuntu_latest()
+{
+	# pull down the current list of packages for this distribution
+	distribution="$1"
+	codename="$2"
+	package_list="$work/$distribution/Packages"
+	mkdir -p "$(dirname $package_list)"
+	if [ ! -e "$package_list" ] ; then
+		url="https://archive.ubuntu.com/ubuntu/dists/$codename/main/binary-amd64/Packages.gz"
+		echo "Fetching $url"
+		curl -f -s -S "$url" | gzip -d > "$package_list.tmp"
+		mv "$package_list.tmp" "$package_list"
+	fi
+
+	package_info="$work/$distribution/locales.package"
+	if [ ! -e "$package_info" ] ; then
+		awk 'BEGIN { in_zone = 0; } /^Package: locales$/ { in_zone = 1; print; } /^ *$/ { in_zone = 0; } in_zone { print; }' "$package_list" > "$package_info.tmp"
+		mv "$package_info.tmp" "$package_info"
+	fi
+
+	package_version="$( grep "Version: " "$package_info" | sed 's/^[^:]*: //')"
+	package_filename="$( grep "Filename: " "$package_info" | sed 's/^[^:]*: //')"
+	package_url="https://archive.ubuntu.com/ubuntu/$package_filename"
+
+	import_locales_deb "$distribution" "$package_url"
+}
+
+
+
+import_locales_debian_latest "debian11" "bullseye"
+#import_locales_deb_latest "debian12" "bookworm"
+#import_locales_deb_latest "debian13" "trixie"
+#import_locales_deb_latest "debian14" "forky"
+
+#import_locales_ubuntu_latest "ubuntu26.04" "resolute"
+#import_locales_ubuntu_latest "ubuntu24.04" "noble"
+#import_locales_ubuntu_latest "ubuntu22.04" "jammy"
+#import_locales_ubuntu_latest "ubuntu20.04" "focal"
+#import_locales_ubuntu_latest "ubuntu18.04" "bionic"
+#import_locales_ubuntu_latest "ubuntu16.04" "xenial"
+#import_locales_ubuntu_latest "ubuntu14.04" "trusty"
