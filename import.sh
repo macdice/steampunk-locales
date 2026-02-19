@@ -19,7 +19,7 @@ fetch_locales_deb()
 
     mkdir -p "$work/$distribution/charmaps"
 
-	echo <<EOF > "$work/$distribution/README"
+	echo <<EOF > "$work/$distribution/PROVENANCE"
 Locales cross-compiled using:
 
 $localdef_version
@@ -103,106 +103,88 @@ import_locales_deb()
     echo "Importing locales from $distribution..."
 
     fetch_locales_deb "$distribution" "$url"
-    compile_locales "$distribution"
+    #compile_locales "$distribution"
 }
 
-import_locales_deb_latest()
+# Handles Debian and Ubuntu
+import_locales_debianlike_latest()
 {
-	# pull down the current list of packages for this distribution
 	distribution="$1"
-	deb_distname="$2"
-	package_list="$work/$distribution/packagelist.txt"
+	codename="$2"
+	repo_base_url="$3"
+
+	package_list="$work/$distribution/Packages"
+
+	# In older Debian and all Ubuntu there is no "binary-all" so we have to
+	# look in "binary-amd64"
+	if curl -f -s -S "$repo_base_url/dists/$codename/main" | grep "binary-all" > /dev/null ; then
+		arch="all"
+	else
+		arch="amd64"
+	fi
+
 	mkdir -p "$(dirname $package_list)"
 	if [ ! -e "$package_list" ] ; then
-		url="https://packages.debian.org/$deb_distname/allpackages?format=txt.gz"
+		url="$repo_base_url/dists/$codename/main/binary-$arch/Packages.gz"
 		echo "Fetching $url"
 		curl -f -s -S "$url" | gzip -d > "$package_list.tmp"
 		mv "$package_list.tmp" "$package_list"
 	fi
 
-	# is it marked [security]?  that affects the URL
-	# TODO: this is using http, but not yet verifying the signature
-	package_dirs="main/g/glibc"
-	package_name="locales"
-	package_arch="all"
-
-	# extract the current version of the locales package
-	package_version="$(grep -E "^$package_name " "$package_list" | sed "s/$package_name (//;s/).*//")"
-
-	if grep "^$package_name .*\[security\]" $package_list > /dev/null ; then
-		package_url="http://security.debian.org/debian-security/pool/updates/${package_dirs}/${package_name}_${package_version}_${package_arch}.deb"
-	else
-		package_url="http://ftp.debian.org/debian/pool/${package_dirs}/${package_name}_${package_version}_${package_arch}.deb"
+	package_info="$work/$distribution/locales.package"
+	if [ ! -e "$package_info" ] ; then
+		awk 'BEGIN { in_zone = 0; } /^Package: locales$/ { in_zone = 1; print; } /^ *$/ { in_zone = 0; } in_zone { print; }' "$package_list" > "$package_info.tmp"
+		mv "$package_info.tmp" "$package_info"
 	fi
+
+	package_version="$( grep "Version: " "$package_info" | sed 's/^[^:]*: //')"
+	package_filename="$( grep "Filename: " "$package_info" | sed 's/^[^:]*: //')"
+	package_url="$repo_base_url/$package_filename"
 
 	import_locales_deb "$distribution" "$package_url"
 }
 
 import_locales_debian_latest()
 {
-	# pull down the current list of packages for this distribution
 	distribution="$1"
 	codename="$2"
-	package_list="$work/$distribution/Packages"
-	mkdir -p "$(dirname $package_list)"
-	if [ ! -e "$package_list" ] ; then
-		url="https://archive.debian.org/debian/dists/$codename/main/binary-all/Packages.gz"
-		echo "Fetching $url"
-		curl -f -s -S "$url" | gzip -d > "$package_list.tmp"
-		mv "$package_list.tmp" "$package_list"
+
+	# figure out if it's in current or archive repos
+	if curl -f -s -S "https://archive.debian.org/debian/dists/" | grep ">$codename/" > /dev/null ; then
+		repo_base_url="https://archive.debian.org/debian"
+	else
+		repo_base_url="http://ftp.debian.org/debian"
 	fi
 
-	package_info="$work/$distribution/locales.package"
-	if [ ! -e "$package_info" ] ; then
-		awk 'BEGIN { in_zone = 0; } /^Package: locales$/ { in_zone = 1; print; } /^ *$/ { in_zone = 0; } in_zone { print; }' "$package_list" > "$package_info.tmp"
-		mv "$package_info.tmp" "$package_info"
-	fi
-
-	package_version="$( grep "Version: " "$package_info" | sed 's/^[^:]*: //')"
-	package_filename="$( grep "Filename: " "$package_info" | sed 's/^[^:]*: //')"
-	package_url="https://archive.debian.org/debian/$package_filename"
-
-	import_locales_deb "$distribution" "$package_url"
+	import_locales_debianlike_latest "$distribution" "$codename" "$repo_base_url"
 }
 
 import_locales_ubuntu_latest()
 {
-	# pull down the current list of packages for this distribution
 	distribution="$1"
 	codename="$2"
-	package_list="$work/$distribution/Packages"
-	mkdir -p "$(dirname $package_list)"
-	if [ ! -e "$package_list" ] ; then
-		url="https://archive.ubuntu.com/ubuntu/dists/$codename/main/binary-amd64/Packages.gz"
-		echo "Fetching $url"
-		curl -f -s -S "$url" | gzip -d > "$package_list.tmp"
-		mv "$package_list.tmp" "$package_list"
-	fi
 
-	package_info="$work/$distribution/locales.package"
-	if [ ! -e "$package_info" ] ; then
-		awk 'BEGIN { in_zone = 0; } /^Package: locales$/ { in_zone = 1; print; } /^ *$/ { in_zone = 0; } in_zone { print; }' "$package_list" > "$package_info.tmp"
-		mv "$package_info.tmp" "$package_info"
-	fi
+	repo_base_url="https://archive.ubuntu.com/ubuntu"
 
-	package_version="$( grep "Version: " "$package_info" | sed 's/^[^:]*: //')"
-	package_filename="$( grep "Filename: " "$package_info" | sed 's/^[^:]*: //')"
-	package_url="https://archive.ubuntu.com/ubuntu/$package_filename"
-
-	import_locales_deb "$distribution" "$package_url"
+	import_locales_debianlike_latest "$distribution" "$codename" "$repo_base_url"
 }
 
 
 
+#import_locales_debian_latest "debian14" "forky"
+#import_locales_debian_latest "debian13" "trixie"
+import_locales_debian_latest "debian12" "bookworm"
 import_locales_debian_latest "debian11" "bullseye"
-#import_locales_deb_latest "debian12" "bookworm"
-#import_locales_deb_latest "debian13" "trixie"
-#import_locales_deb_latest "debian14" "forky"
+import_locales_debian_latest "debian10" "buster"
+import_locales_debian_latest "debian9" "stretch"
+import_locales_debian_latest "debian8" "jessie"
+import_locales_debian_latest "debian7" "wheezy"
+import_locales_debian_latest "debian6" "squeeze"
 
-#import_locales_ubuntu_latest "ubuntu26.04" "resolute"
-#import_locales_ubuntu_latest "ubuntu24.04" "noble"
-#import_locales_ubuntu_latest "ubuntu22.04" "jammy"
-#import_locales_ubuntu_latest "ubuntu20.04" "focal"
-#import_locales_ubuntu_latest "ubuntu18.04" "bionic"
-#import_locales_ubuntu_latest "ubuntu16.04" "xenial"
-#import_locales_ubuntu_latest "ubuntu14.04" "trusty"
+import_locales_ubuntu_latest "ubuntu26.04" "resolute"
+import_locales_ubuntu_latest "ubuntu24.04" "noble"
+import_locales_ubuntu_latest "ubuntu22.04" "jammy"
+import_locales_ubuntu_latest "ubuntu20.04" "focal"
+import_locales_ubuntu_latest "ubuntu18.04" "bionic"
+import_locales_ubuntu_latest "ubuntu16.04" "xenial"
+import_locales_ubuntu_latest "ubuntu14.04" "trusty"
