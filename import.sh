@@ -61,7 +61,8 @@ compile_locales()
     supported_path="$work/$distribution/SUPPORTED"
 
     # debian invented its own definition of C.UTF-8 before glibc 2.35 invented
-    # codepoint_collation, but it wasn't listed in SUPPORTED; add it
+    # codepoint_collation, but it wasn't listed in SUPPORTED, so add it.
+    # newer debian has it in there already, but duplicates do nothing below
     cp "$fakeroot_path/usr/share/i18n/SUPPORTED" "$supported_path"
     echo "C.UTF-8 UTF-8" >> "$supported_path"
 

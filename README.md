@@ -16,9 +16,9 @@ That works the same as C.UTF-8 on FreeBSD and probably other systems, and has
 the obvious meaning that text is sorted in codepoint order, which also matches
 UTF-8 binary order, ie memcmp() order.  Before that, Debian (and Ubuntu, ...)
 systems carried a local patch to add C.UTF-8 that was not from the glibc
-project.  It produces a strange sort order, probably due to implementation
-limitations or artefacts.  That is, glibc does not actually respect the
-definition, which asks for codepoint order.
+project itself.  It produces a strange sort order, probably due to
+implementation limitations or artefacts.  That is, glibc does not actually
+respect the definition, which asks for codepoint order.
 
 The goal of this exercise is to see if I can produce a custom locale definition
 that can be compiled on modern glibc to give that strange sort order from old
@@ -27,9 +27,13 @@ PostgreSQL database index from and old Debian system to a new system,
 preserving the sort order until the user is ready to move to true Unicode
 codepoint order (ie rebuild the indexes).
 
+The following research was performed using a Debian 11 ("bullseye", glibc 2.31)
+system and a Debian 13 ("trixie", glibc 2.41) system, with the `locales`
+package installed so that we have the source locale definition files.
+
 I do not wish to study glibc internals, so I am studying observable external
-behaviour only.  We can see that Debian defines the sort order as literally
-numerical code point order, as expected:
+behaviour only.  We can see that Debian 11's `/usr/share/i18n/locales/C`
+defines the sort order as literally numerical code point order, as expected:
 
 ```
 LC_COLLATE
@@ -62,8 +66,29 @@ order_end
 END LC_COLLATE
 ```
 
-I don't know why it was expressed as a series of small ranges at the start
-and long ranges at the end.
+(I don't know why it was expressed as a series of small ranges at the start and
+long ranges at the end.)
+
+First, some input material for testing.  I produced a file that contains
+every possible Unicode codepoint, even those that are not defined by any
+version of Unicode, so that I could see the effects of undefined code points
+on the two implementations:
+
+```
+
+
+
+```
+vagrant@bullseye:~$ dpkg -l locales | tail -1
+ii  locales        2.31-13+deb11u13 all          GNU C Library: National Language (locale) data [support]
+vagrant@bullseye:~$ zcat /usr/share/i18n/charmaps/UTF-8.gz | python3 ./print-charmap-codepoints.py > unicode13_codepoints.txt
+```
+
+```
+$ dpkg -l locales | tail -1
+ii  locales        2.41-8       all          GNU C Library: National Language (locale) data [support]
+$ zcat /usr/share/i18n/charmaps/UTF-8.gz | python3 ./print-charmap-codepoints.py > unicode16_codepoints.txt
+```
 
 Surprisingly, when you sort a UTF-8 file containing every codepoint separated
 by line breaks on Debian 11 (glibc 2.31), the resulting order has some ranges
