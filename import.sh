@@ -76,8 +76,12 @@ compile_locales()
     # debian invented its own definition of C.UTF-8 before glibc 2.35 invented
     # codepoint_collation, but it wasn't listed in SUPPORTED, so add it.
     # newer debian has it in there already, but duplicates do nothing below
-    cp "$fakeroot_path/usr/share/i18n/SUPPORTED" "$supported_path"
-    echo "C.UTF-8 UTF-8" >> "$supported_path"
+    if [ -e "$fakeroot_path/usr/share/i18n/SUPPORTED" ] ; then
+		# RHEL systems don't have this file, and I don't know where to
+		# get their official locale/charmap combination list from yet!
+	    cp "$fakeroot_path/usr/share/i18n/SUPPORTED" "$supported_path"
+   		echo "C.UTF-8 UTF-8" >> "$supported_path"
+	fi
 
     # compile all locales if we haven't already
     while read -r name charmap ; do
@@ -169,7 +173,90 @@ import_locales_ubuntu_latest()
 	import_locales_debianlike_latest "$distribution" "$codename" "$repo_base_url"
 }
 
+fetch_locales_rpm()
+{
+    distribution="$1"
+    url="$2"
+    package="$(basename $url)"
 
+    mkdir -p "$work/$distribution/charmaps"
+
+	echo <<EOF > "$work/$distribution/PROVENANCE"
+Locales cross-compiled using:
+
+$localdef_version
+
+Definitions obtained from:
+
+$url
+EOF
+
+    # pull down the package if we haven't already
+    package_path="$work/$distribution/$package"
+    if [ ! -f "$package_path" ] ; then
+        echo "Fetching $distribution package $package from $url"
+        curl -f -s -S "$url" > "$package_path.tmp"
+        mv "$package_path.tmp" "$package_path"
+    fi
+
+    # unpack the interesting contents into fakeroot if we haven't already
+    fakeroot_path="$work/$distribution/fakeroot"
+    if [ ! -e "$fakeroot_path" ] ; then
+        rm -fr "$fakeroot_path.tmp"
+        mkdir -p "$fakeroot_path.tmp"
+        echo "Extracting $distribution package $package..."
+        (
+            cd "$fakeroot_path.tmp"
+			rpm2cpio "../../../$package_path" | cpio -idmv
+        )
+        mv "$fakeroot_path.tmp" "$fakeroot_path"
+    fi
+
+    # unpack the charsets if we haven't already
+    charmaps_path="$work/$distribution/charmaps"
+    for charmap_gz in $(ls "$fakeroot_path/usr/share/i18n/charmaps") ; do
+        charmaps_gz_path="$fakeroot_path/usr/share/i18n/charmaps"
+        charmap="$(basename "$charmap_gz" .gz)"
+        charmap_path="$charmaps_path/$charmap"
+        if [ ! -e "$charmap_path" ] ; then
+            echo "Extracting $distribution charmap $charmap..."
+            gzip -d < "$charmaps_gz_path/$charmap_gz" > "$charmap_path.tmp"
+            mv "$charmap_path.tmp" "$charmap_path"
+        fi
+    done
+}
+
+
+import_locales_rpm()
+{
+    distribution="$1"
+    url="$2"
+
+    echo "Importing locales from $distribution..."
+
+    fetch_locales_rpm "$distribution" "$url"
+    compile_locales "$distribution"
+}
+
+import_locales_rocky_latest()
+{
+	distribution="$1"
+
+	major_version="$(echo "$distribution" | sed 's/^[^0-9]*//')"
+	dir_url="https://download.rockylinux.org/pub/rocky/$major_version/BaseOS/x86_64/kickstart/Packages/g/"
+
+	filename="$(curl -f -s -S "$dir_url" | grep '"glibc-locale-source' | sed 's/.*href="//;s/".*//' | sort -V | tail -1)"
+	url="$dir_url/$filename"
+
+	import_locales_rpm "$distribution" "$url"
+}
+
+echo "Using localedef $localedef_version"
+
+#import_locales_rocky_latest "rocky8"
+# newer rocky doesn't have glibc-locale-source where I expected it...
+#import_locales_rocky_latest "rocky9"
+#import_locales_rocky_latest "rocky10"
 
 #import_locales_debian_latest "debian14" "forky"
 #import_locales_debian_latest "debian13" "trixie"
